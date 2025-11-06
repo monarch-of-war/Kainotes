@@ -1,0 +1,33 @@
+[package]
+name = "rpc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Internal dependencies
+blockchain-crypto = { path = "../blockchain-crypto" }
+blockchain-core = { path = "../blockchain-core" }
+consensus = { path = "../consensus" }
+tokenomics = { path = "../tokenomics" }
+smart-contracts = { path = "../smart-contracts" }
+storage = { path = "../storage" }
+
+# Workspace dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# HTTP server
+hyper = { version = "0.14", features = ["server", "http1", "http2"] }
+tower = { version = "0.4", features = ["util"] }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }

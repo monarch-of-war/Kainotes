@@ -1,0 +1,33 @@
+[package]
+name = "networking"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Internal dependencies
+blockchain-crypto = { path = "../blockchain-crypto" }
+blockchain-core = { path = "../blockchain-core" }
+consensus = { path = "../consensus" }
+
+# Workspace dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+hex = {workspace = true }
+rand = {workspace = true }
+
+# Networking
+libp2p = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }

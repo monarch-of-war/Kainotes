@@ -1,0 +1,33 @@
+[package]
+name = "storage"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Internal dependencies
+blockchain-crypto = { path = "../blockchain-crypto" }
+blockchain-core = { path = "../blockchain-core" }
+consensus = { path = "../consensus" }
+smart-contracts = { path = "../smart-contracts" }
+
+# Workspace dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Database
+rocksdb = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+#get number of num_cpu
+num_cpus = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.8"
+

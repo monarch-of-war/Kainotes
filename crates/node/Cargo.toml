@@ -1,0 +1,40 @@
+[package]
+name = "node"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "utility-node"
+path = "src/main.rs"
+
+[dependencies]
+# Internal dependencies
+blockchain-crypto = { path = "../blockchain-crypto" }
+blockchain-core = { path = "../blockchain-core" }
+consensus = { path = "../consensus" }
+tokenomics = { path = "../tokenomics" }
+liquidity = { path = "../liquidity" }
+smart-contracts = { path = "../smart-contracts" }
+networking = { path = "../networking" }
+storage = { path = "../storage" }
+rpc = { path = "../rpc" }
+
+# Workspace dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Config
+toml = "0.8"

@@ -1,0 +1,98 @@
+# Utility-Backed Blockchain Protocol - Rust Implementation Structure
+
+## Project Layout
+
+```
+utility-blockchain/
+├── Cargo.toml                      # Workspace root
+├── README.md
+├── LICENSE
+│
+├── crates/
+│   ├── blockchain-crypto/          # Cryptographic primitives
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── hash.rs
+│   │       ├── signature.rs
+│   │       ├── keypair.rs
+│   │       └── merkle.rs
+│   │
+│   ├── blockchain-core/            # Core blockchain logic
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── block.rs
+│   │       ├── chain.rs
+│   │       ├── transaction.rs
+│   │       ├── state.rs
+│   │       └── types.rs
+│   │
+│   ├── consensus/                  # PoAS consensus
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── poas.rs
+│   │       ├── validator.rs
+│   │       ├── selection.rs
+│   │       └── slashing.rs
+│   │
+│   ├── tokenomics/                 # Economic layer
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── minting.rs
+│   │       ├── phase_manager.rs
+│   │       ├── utility_index.rs
+│   │       ├── rewards.rs
+│   │       └── burning.rs
+│   │
+│   ├── liquidity/                  # Liquidity management
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── pool.rs
+│   │       ├── deployment.rs
+│   │       └── risk.rs
+│   │
+│   ├── smart-contracts/            # EVM compatibility
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── vm.rs
+│   │       └── precompiles.rs
+│   │
+│   ├── networking/                 # P2P networking
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── p2p.rs
+│   │       ├── sync.rs
+│   │       └── protocol.rs
+│   │
+│   ├── storage/                    # Database layer
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── db.rs
+│   │       └── cache.rs
+│   │
+│   ├── rpc/                        # JSON-RPC API
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── server.rs
+│   │       └── methods.rs
+│   │
+│   └── node/                       # Full node implementation
+│       ├── Cargo.toml
+│       └── src/
+│           ├── main.rs
+│           ├── config.rs
+│           └── runtime.rs
+│
+├── contracts/                      # Smart contract examples
+│   └── solidity/
+│
+└── tests/                         # Integration tests
+    └── integration/

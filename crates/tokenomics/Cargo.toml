@@ -1,0 +1,32 @@
+[package]
+name = "tokenomics"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Internal dependencies
+blockchain-crypto = { path = "../blockchain-crypto" }
+blockchain-core = { path = "../blockchain-core" }
+consensus = { path = "../consensus" }
+
+# Workspace dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Numeric
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+rust_decimal = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

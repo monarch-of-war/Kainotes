@@ -1,0 +1,33 @@
+[package]
+name = "blockchain-crypto"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# Cryptography
+sha2 = { workspace = true }
+sha3 = { workspace = true }
+blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+secp256k1 = { workspace = true }
+rand = { workspace = true }
+rand_core = { workspace = true }
+
+# Encoding
+hex = "0.4"
+bs58 = "0.5"
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true }
+
+#[[bench]]
+#name = "crypto_bench"
+#harness = false

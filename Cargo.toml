@@ -1,0 +1,87 @@
+[workspace]
+members = [
+    "crates/blockchain-crypto",
+    "crates/blockchain-core", 
+    "crates/consensus", 
+    "crates/tokenomics",
+    "crates/liquidity", 
+    "crates/smart-contracts", 
+    "crates/networking", 
+    "crates/storage", 
+    "crates/rpc", 
+    "crates/node",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["tsangilwa"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourorg/utility-blockchain"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
+hex = "0.4.3"
+
+
+# Cryptography
+sha2 = "0.10"
+sha3 = "0.10"
+blake3 = "1.5"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+secp256k1 = { version = "0.28", features = ["rand", "recovery"] }
+rand = "0.8"
+rand_core = "0.6"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+
+# Networking
+libp2p = { version = "0.53", features = ["full"]} #[#"tcp", #"noise", "mplex", "yamux"] }
+futures = "0.3"
+
+# Database
+rocksdb = "0.21"
+sled = "0.34"
+num_cpus = "1.17.0"
+
+# Web3/EVM
+revm = { version = "3.5", features = ["std", "serde"] }
+ethers-core = "2.0"
+
+# Math
+num-bigint = {version = "0.4", features = ["serde"] }
+num-traits = "0.2"
+rust_decimal = "1.33"
+
+# Time
+chrono = "0.4"
+
+# Testing
+proptest = "1.4"
+criterion = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+
+[profile.test]
+opt-level = 2
