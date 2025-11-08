@@ -95,7 +95,36 @@ impl Blockchain {
         &mut self.state
     }
 
-    /// Add a new block to the chain
+    // /// Add a new block to the chain
+    // pub fn add_block(&mut self, block: Block) -> BlockchainResult<()> {
+    //     // Get parent block
+    //     let parent = self.get_block(&block.header.parent_hash)
+    //         .ok_or_else(|| BlockchainError::BlockNotFound(block.header.parent_hash))?
+    //         .clone();
+
+    //     // Validate block
+    //     block.validate(&parent)?;
+
+    //     // Verify state root matches
+    //     if block.header.state_root != self.state.state_root() {
+    //         return Err(BlockchainError::InvalidBlock(
+    //             "State root mismatch".into()
+    //         ));
+    //     }
+
+    //     // Add block to chain
+    //     let block_hash = block.hash();
+    //     let block_number = block.number();
+        
+    //     self.blocks.insert(block_hash, block);
+    //     self.block_by_number.insert(block_number, block_hash);
+    //     self.head = block_hash;
+
+    //     Ok(())
+    // }
+
+
+    /// Add a new block to the chain (with fork detection)
     pub fn add_block(&mut self, block: Block) -> BlockchainResult<()> {
         // Get parent block
         let parent = self.get_block(&block.header.parent_hash)
@@ -112,16 +141,118 @@ impl Blockchain {
             ));
         }
 
+        // Check for potential fork
+        let current_head = self.head_block();
+        if block.header.parent_hash != current_head.hash() && !current_head.is_genesis() {
+            // This is a fork - would need ForkResolver to handle
+            tracing::warn!(
+                "Potential fork detected: block parent {} != current head {}",
+                block.header.parent_hash.to_hex(),
+                current_head.hash().to_hex()
+            );
+        }
+
         // Add block to chain
         let block_hash = block.hash();
         let block_number = block.number();
         
-        self.blocks.insert(block_hash, block);
+        self.blocks.insert(block_hash, block.clone());
         self.block_by_number.insert(block_number, block_hash);
         self.head = block_hash;
 
         Ok(())
     }
+
+    /// Add block with full validation and state execution
+    pub fn add_block_with_execution(&mut self, block: Block) -> BlockchainResult<()> {
+        // Execute all transactions in the block
+        for tx in &block.transactions {
+            let receipt = self.execute_transaction(tx)?;
+            self.receipts.insert(tx.hash(), receipt);
+        }
+
+        // Verify state root after execution
+        if block.header.state_root != self.state.state_root() {
+            self.state.rollback();
+            return Err(BlockchainError::InvalidBlock(
+                "State root mismatch after execution".into()
+            ));
+        }
+
+        self.add_block(block)
+    }
+
+
+/// Get block range
+    pub fn get_block_range(&self, start: BlockNumber, end: BlockNumber) -> Vec<Block> {
+        (start..=end)
+            .filter_map(|num| self.get_block_by_number(num))
+            .cloned()
+            .collect()
+    }
+
+    /// Get recent blocks
+    pub fn get_recent_blocks(&self, count: usize) -> Vec<Block> {
+        let height = self.height();
+        let start = height.saturating_sub(count as u64);
+        self.get_block_range(start, height)
+    }
+
+    /// Get all transactions in a block range
+    pub fn get_transactions_in_range(&self, start: BlockNumber, end: BlockNumber) -> Vec<Transaction> {
+        self.get_block_range(start, end)
+            .iter()
+            .flat_map(|block| block.transactions.clone())
+            .collect()
+    }
+
+    /// Get all receipts for transactions in a block
+    pub fn get_block_receipts(&self, block_number: BlockNumber) -> Vec<TransactionReceipt> {
+        if let Some(block) = self.get_block_by_number(block_number) {
+            block.transactions.iter()
+                .filter_map(|tx| self.get_receipt(&tx.hash()))
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Check if transaction exists in chain
+    pub fn has_transaction(&self, tx_hash: &Hash) -> bool {
+        self.receipts.contains_key(tx_hash)
+    }
+
+    /// Get transaction by hash (searches through blocks)
+    pub fn find_transaction(&self, tx_hash: &Hash) -> Option<(BlockNumber, Transaction)> {
+        for (block_num, block_hash) in &self.block_by_number {
+            if let Some(block) = self.blocks.get(block_hash) {
+                for tx in &block.transactions {
+                    if tx.hash() == *tx_hash {
+                        return Some((*block_num, tx.clone()));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Get total gas used in a block range
+    pub fn get_total_gas_used(&self, start: BlockNumber, end: BlockNumber) -> u64 {
+        self.get_block_range(start, end)
+            .iter()
+            .map(|block| block.header.gas_used)
+            .sum()
+    }
+
+    /// Get transaction count in range
+    pub fn get_transaction_count(&self, start: BlockNumber, end: BlockNumber) -> u64 {
+        self.get_block_range(start, end)
+            .iter()
+            .map(|block| block.transactions.len() as u64)
+            .sum()
+    }
+
 
     /// Execute a transaction
     pub fn execute_transaction(

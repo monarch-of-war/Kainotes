@@ -16,6 +16,8 @@ bincode = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 
+tracing = {workspace = true }
+
 # Time
 chrono = { workspace = true }
 

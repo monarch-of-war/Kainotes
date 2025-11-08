@@ -20,6 +20,19 @@ pub use transaction::{Transaction, TransactionType, TransactionReceipt};
 pub use state::{Account, WorldState};
 pub use types::*;
 
+
+// ADD these module declarations (around line 10, after existing modules):
+pub mod mempool;
+pub mod fork;
+pub mod metrics;
+
+// ADD these to pub use statements (around line 17):
+pub use mempool::{TransactionPool, PoolConfig, PoolMetrics};
+pub use fork::{ForkChoice, ForkResolver};
+pub use metrics::ChainMetrics;
+
+
+
 use blockchain_crypto::{Address, Hash};
 
 /// Result type for blockchain operations
@@ -57,6 +70,25 @@ pub enum BlockchainError {
     
     #[error("Serialization error: {0}")]
     SerializationError(String),
+
+    // ADD these to BlockchainError enum (around line 40):
+    #[error("Duplicate transaction: {0}")]
+    DuplicateTransaction(Hash),
+
+    #[error("Transaction pool full")]
+    PoolFull,
+
+    #[error("Fork detected: {0}")]
+    ForkDetected(String),
+
+    #[error("Reorg too deep: {depth} blocks")]
+    ReorgTooDeep { depth: u64 },
+
+    #[error("Gas limit exceeded")]
+    GasLimitExceeded,
+
+    #[error("Invalid signature")]
+    InvalidSignature,
 }
 
 #[cfg(test)]
