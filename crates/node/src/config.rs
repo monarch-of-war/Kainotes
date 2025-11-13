@@ -10,6 +10,9 @@ pub struct NodeConfig {
     pub rpc: RpcConfig,
     pub consensus: ConsensusConfig,
     pub storage: StorageConfig,
+    pub mempool: MemPoolConfig,
+    pub fork_handling: ForkHandlingConfig,
+    pub metrics: MetricsConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub validator: Option<ValidatorConfig>,
 }
@@ -50,6 +53,33 @@ pub struct ValidatorConfig {
     pub initial_stake: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemPoolConfig {
+    pub max_size: usize,
+    pub max_per_account: usize,
+    pub min_gas_price: u64,
+    pub max_age: u64,
+    pub enable_replacement: bool,
+    pub prune_interval_seconds: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForkHandlingConfig {
+    pub fork_choice: String, // "LongestChain" or "GHOST" etc.
+    pub max_reorg_depth: u64,
+    pub enable_fork_alerts: bool,
+    pub alert_threshold_depth: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsConfig {
+    pub window_size: u64,
+    pub enable_collection: bool,
+    pub snapshot_interval: u64, // in blocks
+    pub export_prometheus: bool,
+    pub prometheus_port: u16,
+}
+
 impl Default for NodeConfig {
     fn default() -> Self {
         Self {
@@ -73,6 +103,27 @@ impl Default for NodeConfig {
                 max_open_files: 1024,
                 pruning: "pruned".into(),
                 keep_blocks: 10000,
+            },
+            mempool: MemPoolConfig {
+                max_size: 10_000,
+                max_per_account: 100,
+                min_gas_price: 1,
+                max_age: 3_600,
+                enable_replacement: true,
+                prune_interval_seconds: 60,
+            },
+            fork_handling: ForkHandlingConfig {
+                fork_choice: "LongestChain".into(),
+                max_reorg_depth: 100,
+                enable_fork_alerts: true,
+                alert_threshold_depth: 10,
+            },
+            metrics: MetricsConfig {
+                window_size: 100,
+                enable_collection: true,
+                snapshot_interval: 10,
+                export_prometheus: false,
+                prometheus_port: 9090,
             },
             validator: None,
         }
