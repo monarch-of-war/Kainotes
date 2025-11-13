@@ -1,10 +1,16 @@
 // rpc/src/methods.rs
-use crate::{RpcError, RpcResult, BlockId};
-use blockchain_core::{Blockchain, Block, Transaction, Amount};
+//ignore warning
+#![allow(unused)]
+
+use crate::{RpcError, RpcResult};
+use blockchain_core::{Blockchain, Transaction};
 use blockchain_crypto::{Address, Hash};
 use storage::Database;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use hex;
+use bincode;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct RpcMethods {
     blockchain: Arc<RwLock<Blockchain>>,
@@ -95,32 +101,7 @@ impl RpcMethods {
         Ok(serde_json::json!(balance_hex))
     }
 
-    async fn kai_get_block_by_number(&self, params: serde_json::Value) -> RpcResult<serde_json::Value> {
-        let params: Vec<serde_json::Value> = serde_json::from_value(params)
-            .map_err(|_| RpcError::InvalidParams("Expected array".into()))?;
-        
-        if params.is_empty() {
-            return Err(RpcError::InvalidParams("Expected block number".into()));
-        }
 
-        let block_str = params[0].as_str()
-            .ok_or_else(|| RpcError::InvalidParams("Invalid block number".into()))?;
-
-        let number = if block_str == "latest" {
-            self.blockchain.read().await.height()
-        } else if block_str.starts_with("0x") {
-            u64::from_str_radix(&block_str[2..], 16)
-                .map_err(|_| RpcError::InvalidParams("Invalid hex number".into()))?
-        } else {
-            block_str.parse()
-                .map_err(|_| RpcError::InvalidParams("Invalid number".into()))?
-        };
-
-        match self.database.get_block_by_number(number).map_err(|e| RpcError::InternalError(e.to_string()))? {
-            Some(block) => Ok(serde_json::to_value(block).unwrap()),
-            None => Ok(serde_json::Value::Null),
-        }
-    }
 
     async fn kai_get_block_by_hash(&self, params: serde_json::Value) -> RpcResult<serde_json::Value> {
         let params: Vec<serde_json::Value> = serde_json::from_value(params)
@@ -175,10 +156,6 @@ impl RpcMethods {
         }
     }
 
-    async fn kai_send_raw_transaction(&self, _params: serde_json::Value) -> RpcResult<serde_json::Value> {
-        // Would implement actual transaction submission
-        Ok(serde_json::json!("0x0000000000000000000000000000000000000000000000000000000000000000"))
-    }
 
     async fn kai_call(&self, _params: serde_json::Value) -> RpcResult<serde_json::Value> {
         // Would implement contract call
@@ -362,7 +339,7 @@ impl RpcMethods {
         let start_time = v.get(1).and_then(|x| x.as_u64());
 
         let hours_back = if let Some(start) = start_time {
-            let now = unix_timestamp();
+            let now = Self::unix_timestamp();
             if now > start { Some((now - start) / 3600) } else { Some(0) }
         } else { None };
 
@@ -494,7 +471,6 @@ impl RpcMethods {
     // ==================== UTIL HELPERS ====================
 
     fn unix_timestamp() -> u64 {
-        use std::time::{SystemTime, UNIX_EPOCH};
         SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
     }
 }

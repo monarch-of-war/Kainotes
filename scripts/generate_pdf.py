@@ -6,6 +6,7 @@ This script is only used to create the requested PDF documentation file from the
 import sys
 from pathlib import Path
 
+
 try:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet
