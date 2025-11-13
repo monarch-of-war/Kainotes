@@ -23,10 +23,10 @@ pub struct PoolConfig {
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
-            max_size: 10000,
+            max_size: 10_000,
             max_per_account: 100,
             min_gas_price: 1,
-            max_age: 3600, // 1 hour
+            max_age: 3_600, // 1 hour
             enable_replacement: true,
         }
     }

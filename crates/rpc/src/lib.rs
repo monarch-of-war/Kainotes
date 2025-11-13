@@ -21,6 +21,14 @@ pub enum RpcError {
     InternalError(String),
     #[error("Server error: {0}")]
     ServerError(String),
+    #[error("Transaction pool full: {0}")]
+    PoolFull(String),
+    #[error("Transaction already in pool: {0}")]
+    DuplicateTransaction(String),
+    #[error("Chain fork detected: {0}")]
+    ForkDetected(String),
+    #[error("Reorganization too deep: {0}")]
+    ReorgTooDeep(String),
 }
 
 impl RpcError {
@@ -32,6 +40,10 @@ impl RpcError {
             RpcError::InvalidParams(_) => -32602,
             RpcError::InternalError(_) => -32603,
             RpcError::ServerError(_) => -32000,
+            RpcError::PoolFull(_) => -32000,
+            RpcError::DuplicateTransaction(_) => -32001,
+            RpcError::ForkDetected(_) => -32002,
+            RpcError::ReorgTooDeep(_) => -32003,
         }
     }
 }

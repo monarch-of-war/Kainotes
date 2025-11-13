@@ -12,6 +12,10 @@ pub struct RpcConfig {
     pub max_connections: usize,
     pub enable_ws: bool,
     pub cors_origins: Vec<String>,
+    // New configuration options
+    pub enable_mempool_methods: bool,
+    pub max_range_query_blocks: u64,
+    pub metrics_cache_duration: u64, // seconds
 }
 
 impl Default for RpcConfig {
@@ -21,6 +25,9 @@ impl Default for RpcConfig {
             max_connections: 100,
             enable_ws: false,
             cors_origins: vec!["*".to_string()],
+            enable_mempool_methods: true,
+            max_range_query_blocks: 100,
+            metrics_cache_duration: 1,
         }
     }
 }
