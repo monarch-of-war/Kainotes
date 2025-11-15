@@ -16,6 +16,7 @@ pub mod gossip;
 pub mod peer;
 
 pub use p2p::{NetworkService, NetworkConfig, NetworkEvent};
+pub use peer::PeerId;
 pub use sync::{SyncManager, SyncStatus, SyncStrategy};
 pub use protocol::{ProtocolMessage, MessageType};
 pub use gossip::{GossipService, GossipTopic};

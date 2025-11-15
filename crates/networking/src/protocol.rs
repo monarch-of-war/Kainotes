@@ -23,6 +23,18 @@ pub enum ProtocolMessage {
     NewBlock(NewBlockMessage),
     /// New transaction announcement
     NewTransaction(NewTransactionMessage),
+    /// New pending transaction (gossiped with metadata)
+    NewPendingTransaction(NewPendingTransactionMessage),
+    /// Request a mempool sync from a peer
+    RequestMempoolSync(RequestMempoolSyncMessage),
+    /// Response to mempool sync request
+    MempoolSyncResponse(MempoolSyncResponseMessage),
+    /// Notify peers about a detected fork
+    ForkDetected(ForkDetectedMessage),
+    /// Request a range of chain blocks
+    RequestChainSegment(RequestChainSegmentMessage),
+    /// Response containing a chain segment (blocks)
+    ChainSegmentResponse(ChainSegmentResponseMessage),
     /// Ping/Pong for keepalive
     Ping,
     Pong,
@@ -72,6 +84,41 @@ pub struct NewBlockMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewTransactionMessage {
     pub transaction: Transaction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewPendingTransactionMessage {
+    pub transaction: Transaction,
+    pub gas_price: u64,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestMempoolSyncMessage {
+    pub max_count: usize,
+    pub min_gas_price: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MempoolSyncResponseMessage {
+    pub transactions: Vec<Transaction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForkDetectedMessage {
+    pub fork_point_hash: Hash,
+    pub competing_tips: Vec<Hash>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestChainSegmentMessage {
+    pub start_block: BlockNumber,
+    pub end_block: BlockNumber,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainSegmentResponseMessage {
+    pub blocks: Vec<Block>,
 }
 
 /// Message type for gossip protocol

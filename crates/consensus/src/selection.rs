@@ -261,8 +261,14 @@ mod tests {
     use blockchain_core::{StakeAmount, UtilityScore};
 
     fn create_test_validator(stake: u64, utility: u64, uptime: u16) -> ValidatorInfo {
+        // Create a deterministic, unique address per stake for tests
+        let mut bytes = [0u8; 20];
+        let s_bytes = stake.to_be_bytes();
+        bytes[12..20].copy_from_slice(&s_bytes);
+        let addr = Address::new(bytes);
+
         let mut validator = ValidatorInfo::new(
-            Address::zero(),
+            addr,
             StakeAmount::from_u64(stake),
             100,
         );

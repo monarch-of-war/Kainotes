@@ -6,9 +6,11 @@ use crate::{
     validator::{ValidatorInfo, ValidatorSet},
     ConsensusError, ConsensusResult,
 };
-use blockchain_core::{Block, BlockNumber, StakeAmount, Timestamp};
+use blockchain_core::{Block, BlockNumber, StakeAmount, Timestamp, fork::{ForkChoice, ForkResolver, ForkInfo, ReorgPath}, mempool::TransactionPool, Gas};
+use blockchain_crypto::Hash;
 use blockchain_crypto::Address;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Configuration for PoAS consensus
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +31,14 @@ pub struct ConsensusConfig {
     pub target_validator_count: usize,
     /// Maximum validator count
     pub max_validator_count: usize,
+    /// Fork choice rule for chain selection
+    pub fork_choice: ForkChoice,
+    /// Maximum allowed reorg depth
+    pub max_reorg_depth: u64,
+    /// Enable fork detection and resolution
+    pub enable_fork_detection: bool,
+    /// Slash validators for producing blocks on wrong fork
+    pub slash_for_wrong_fork: bool,
 }
 
 impl Default for ConsensusConfig {
@@ -42,6 +52,10 @@ impl Default for ConsensusConfig {
             finality_blocks: 2,                     // 6 seconds
             target_validator_count: 100,
             max_validator_count: 1000,
+            fork_choice: ForkChoice::LatestJustified,
+            max_reorg_depth: 100,
+            enable_fork_detection: true,
+            slash_for_wrong_fork: true,
         }
     }
 }
@@ -60,6 +74,22 @@ pub struct PoASConsensus {
     current_epoch: u64,
     /// Blocks per epoch
     blocks_per_epoch: u64,
+    /// Fork resolver for chain reorganizations
+    fork_resolver: ForkResolver,
+    /// Finality checkpoints: block_number -> is_justified
+    finality_checkpoints: HashMap<BlockNumber, bool>,
+    /// Fork events for metrics
+    fork_events: Vec<(BlockNumber, String)>,
+    /// Highest justified checkpoint (block number)
+    highest_justified: Option<BlockNumber>,
+    /// Metrics: total forks observed
+    fork_frequency: u64,
+    /// Metrics: total reorg depth observed
+    total_reorg_depth: u64,
+    /// Metrics: maximum reorg depth observed
+    max_reorg_depth_observed: u64,
+    /// Finality time records: block_number -> timestamp when justified
+    finality_times: Vec<(BlockNumber, u64)>,
 }
 
 impl PoASConsensus {
@@ -70,6 +100,8 @@ impl PoASConsensus {
             config.unbonding_period,
         );
         
+        let fork_resolver = ForkResolver::new(config.fork_choice, config.max_reorg_depth);
+        
         Self {
             config,
             validator_set,
@@ -77,6 +109,14 @@ impl PoASConsensus {
             slashing: SlashingManager::new(),
             current_epoch: 0,
             blocks_per_epoch: 28800, // ~1 day at 3s blocks
+            fork_resolver,
+            finality_checkpoints: HashMap::new(),
+            fork_events: Vec::new(),
+            highest_justified: None,
+            fork_frequency: 0,
+            total_reorg_depth: 0,
+            max_reorg_depth_observed: 0,
+            finality_times: Vec::new(),
         }
     }
 
@@ -152,6 +192,22 @@ impl PoASConsensus {
             ));
         }
 
+        // Fork detection
+        if self.config.enable_fork_detection {
+            if let Some(fork_info) = self.fork_resolver.detect_fork(parent, block) {
+                // Log fork detection for observability; deeper handling happens during block application
+                tracing::warn!("Fork detected at {}: main_tip={}, fork_tip={}",
+                    fork_info.fork_point, fork_info.main_tip, fork_info.fork_tip);
+
+                // If the fork is deeper than allowed, reject the block
+                if fork_info.fork_length > self.config.max_reorg_depth {
+                    return Err(ConsensusError::BlockchainError(
+                        blockchain_core::BlockchainError::ReorgTooDeep { depth: fork_info.fork_length }
+                    ));
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -209,7 +265,187 @@ impl PoASConsensus {
 
     /// Check if a block is finalized
     pub fn is_finalized(&self, block_number: BlockNumber, head: BlockNumber) -> bool {
+        // If we have a justified checkpoint, enforce it as final
+        if let Some(j) = self.highest_justified {
+            return block_number <= j;
+        }
+
         head >= block_number + self.config.finality_blocks
+    }
+
+    /// Mark a block as justified (justified checkpoint)
+    pub fn update_justified_checkpoint(&mut self, block_number: BlockNumber) {
+        let entry = self.finality_checkpoints.entry(block_number).or_insert(true);
+        *entry = true;
+
+        self.highest_justified = Some(std::cmp::max(self.highest_justified.unwrap_or(0), block_number));
+        // Record finality timestamp
+        self.finality_times.push((block_number, current_timestamp()));
+        tracing::info!("Justified checkpoint updated: {}", block_number);
+    }
+
+    /// Verify before block production that head is canonical and safe to build on
+    pub fn verify_before_produce(&self, head: &Hash) -> ConsensusResult<()> {
+        if !self.verify_chain_canonical(head) {
+            return Err(ConsensusError::BlockProductionError("Head is not canonical according to fork history".into()));
+        }
+
+        // Do not produce if head would violate a justified checkpoint
+        if let Some(j) = self.highest_justified {
+            // Here we would check head block number against justified checkpoint; simplified: ensure not empty
+            // In a full node this would translate head hash to block number via storage and compare.
+        }
+
+        Ok(())
+    }
+
+    /// Get basic fork metrics: (frequency, total_reorg_depth, max_reorg_depth)
+    pub fn fork_metrics(&self) -> (u64, u64, u64) {
+        (self.fork_frequency, self.total_reorg_depth, self.max_reorg_depth_observed)
+    }
+
+    /// Get finality time records
+    pub fn finality_records(&self) -> &Vec<(BlockNumber, u64)> {
+        &self.finality_times
+    }
+
+    /// Produce a new block: select transactions from mempool, validate head canonicality,
+    /// and return the constructed block. Removes included transactions from the pool.
+    pub fn produce_block(&mut self, parent: &Block, proposer: Address, pool: &mut TransactionPool) -> ConsensusResult<Block> {
+        // Pre-production checks
+        self.verify_before_produce(&parent.hash())?;
+
+        // Choose transactions by gas price up to gas limit
+        let max_gas = parent.header.gas_limit;
+        let txs = pool.get_pending(max_gas, 1000);
+
+        // Filter transactions by basic validity
+        let mut valid_txs = Vec::new();
+        for tx in txs {
+            if tx.validate_basic().is_ok() {
+                valid_txs.push(tx);
+            }
+        }
+
+        // Create block
+        let number = parent.number() + 1;
+        let state_root = Hash::zero(); // state root computed during execution in full node
+        let block = Block::new(number, parent.hash(), state_root, proposer, valid_txs.clone(), max_gas)
+            .map_err(|e| ConsensusError::BlockchainError(e))?;
+
+        // Remove included transactions from pool
+        pool.remove_included(&valid_txs);
+
+        // Update proposer stats
+        if let Some(v) = self.validator_set.get_mut(&proposer) {
+            v.blocks_produced += 1;
+            v.update_uptime(true);
+        }
+
+        Ok(block)
+    }
+
+    /// Get validator participation rates and missed blocks map
+    pub fn validator_participation(&self) -> Vec<(Address, u16, u64, u64)> {
+        // Returns (address, uptime, produced, missed)
+        self.validator_set.all_validators().into_iter().map(|v| {
+            (v.address, v.uptime, v.blocks_produced, v.blocks_missed)
+        }).collect()
+    }
+
+    /// Apply a reorganization path. This records fork events, enforces justified checkpoints,
+    /// and performs basic slashing for double-signing evidence.
+    ///
+    /// An optional persistence callback may be provided to persist fork events. The callback
+    /// receives `(&ForkInfo, reorg_depth, resolution_str)` and should return `ConsensusResult<()>`.
+    pub fn apply_reorg(&mut self, reorg: ReorgPath, mut persist: Option<&mut dyn FnMut(&ForkInfo, u64, &str) -> ConsensusResult<()>>) -> ConsensusResult<()> {
+        // Determine common ancestor block number from revert/apply blocks
+        let common_ancestor_number = if !reorg.revert_blocks.is_empty() {
+            reorg.revert_blocks.iter().map(|b| b.header.number).min().unwrap_or(0).saturating_sub(1)
+        } else if !reorg.apply_blocks.is_empty() {
+            reorg.apply_blocks[0].header.number.saturating_sub(1)
+        } else {
+            return Err(ConsensusError::ValidationError("Empty reorg path".into()));
+        };
+
+        // Prevent reorgs that revert past justified checkpoints
+        if let Some(j) = self.highest_justified {
+            if common_ancestor_number < j {
+                return Err(ConsensusError::BlockchainError(
+                    blockchain_core::BlockchainError::ReorgTooDeep { depth: reorg.depth }
+                ));
+            }
+        }
+
+        // Detect double-signing: same proposer produced blocks at same height on both sides
+        for a in &reorg.apply_blocks {
+            for r in &reorg.revert_blocks {
+                if a.header.number == r.header.number && a.header.proposer == r.header.proposer {
+                    tracing::warn!("Double-sign detected: validator={} at height {}", a.header.proposer.to_hex(), a.header.number);
+                    if self.config.slash_for_wrong_fork {
+                        if let Some(validator) = self.validator_set.get_mut(&a.header.proposer) {
+                            let _penalty = self.slashing.slash_validator(
+                                validator,
+                                crate::slashing::SlashingCondition::DoubleSigning,
+                                Some(a.hash()),
+                            )?;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Record fork info and metrics
+        let main_tip = reorg.revert_blocks.get(0).map(|b| b.hash()).unwrap_or_else(|| reorg.common_ancestor);
+        let fork_tip = reorg.apply_blocks.last().map(|b| b.hash()).unwrap_or_else(|| reorg.common_ancestor);
+        let fork_info = ForkInfo {
+            fork_point: common_ancestor_number,
+            fork_hash: reorg.common_ancestor,
+            main_tip,
+            fork_tip,
+            main_length: reorg.revert_blocks.len() as u64,
+            fork_length: reorg.apply_blocks.len() as u64,
+        };
+
+        self.fork_resolver.record_fork(fork_info.clone());
+        self.fork_events.push((common_ancestor_number, "resolved".into()));
+
+        // Update metrics
+        self.fork_frequency += 1;
+        self.total_reorg_depth += reorg.depth;
+        if reorg.depth > self.max_reorg_depth_observed {
+            self.max_reorg_depth_observed = reorg.depth;
+        }
+
+        // Use fork_resolver to choose which chain to keep (simplified)
+        let choice = self.fork_resolver.choose_chain(&reorg.revert_blocks, &reorg.apply_blocks)?;
+        let resolution = if choice { "fork_chain" } else { "main_chain" };
+
+        // Persist fork event if a persistence callback was provided
+        if let Some(cb) = persist.as_mut() {
+            cb(&fork_info, reorg.depth, resolution)?;
+        }
+
+        if choice {
+            tracing::info!("Reorg chosen: switch to fork chain (depth={})", reorg.depth);
+        } else {
+            tracing::info!("Reorg chosen: keep main chain (depth={})", reorg.depth);
+        }
+
+        Ok(())
+    }
+
+    /// Verify that the given head hash is canonical according to fork resolver/history.
+    /// Note: Full verification requires chain storage; this is a best-effort check against recent fork history.
+    pub fn verify_chain_canonical(&self, head: &Hash) -> bool {
+        // If our fork history contains this head as a fork tip that lost, it's not canonical
+        for info in self.fork_resolver.fork_history() {
+            if info.fork_tip == *head && info.fork_length <= info.main_length {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Register a new validator
@@ -332,6 +568,68 @@ fn current_timestamp() -> Timestamp {
 mod tests {
     use super::*;
     use blockchain_crypto::{KeyPair, SignatureScheme};
+
+    #[test]
+    fn test_apply_reorg_and_slash() {
+        let config = ConsensusConfig::default();
+        let mut consensus = PoASConsensus::new(config);
+
+        // Create a validator and register
+        let kp = KeyPair::generate(SignatureScheme::Ed25519).unwrap();
+        let addr = kp.public_key().to_address();
+        consensus.register_validator(addr, StakeAmount::from_u64(100000), 100).unwrap();
+
+        // Create two conflicting blocks at same height with same proposer to simulate double-sign
+        let genesis = Block::genesis(Hash::zero());
+        let mut block_main = Block::new(1, genesis.hash(), Hash::zero(), addr, vec![], 10_000_000).unwrap();
+        let mut block_fork = Block::new(1, genesis.hash(), Hash::zero(), addr, vec![], 10_000_000).unwrap();
+
+        // Build a reorg path: revert main (one block) and apply fork (one block)
+        let reorg = ReorgPath {
+            common_ancestor: genesis.hash(),
+            revert_blocks: vec![block_main.clone()],
+            apply_blocks: vec![block_fork.clone()],
+            depth: 1,
+        };
+
+        // Apply reorg without persistence (None)
+        consensus.apply_reorg(reorg, None).unwrap();
+
+        // Validator should have been slashed for double-sign
+        let v = consensus.validator_set().get(&addr).unwrap();
+        assert!(v.stake.inner() < StakeAmount::from_u64(100000).inner());
+    }
+
+    #[test]
+    fn test_verify_before_produce_and_metrics() {
+        let config = ConsensusConfig::default();
+        let mut consensus = PoASConsensus::new(config);
+
+        // No forks yet — head should be considered canonical
+        let head = Hash::zero();
+        assert!(consensus.verify_before_produce(&head).is_ok());
+
+        // Create a fake fork info and record it via fork_resolver
+        let fork_info = ForkInfo {
+            fork_point: 0,
+            fork_hash: Hash::zero(),
+            main_tip: Hash::zero(),
+            fork_tip: Hash::new([1u8; 32]),
+            main_length: 2,
+            fork_length: 1,
+        };
+        consensus.fork_resolver.record_fork(fork_info);
+
+        // Now fork_tip that lost should be non-canonical
+        let non_canonical = Hash::new([1u8; 32]);
+        assert!(!consensus.verify_chain_canonical(&non_canonical));
+
+        // Metrics getters
+        let (freq, total_depth, max_depth) = consensus.fork_metrics();
+        assert_eq!(freq, 0);
+        assert_eq!(total_depth, 0);
+        assert_eq!(max_depth, 0);
+    }
 
     #[test]
     fn test_consensus_creation() {

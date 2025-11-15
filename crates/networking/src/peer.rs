@@ -192,6 +192,13 @@ impl PeerManager {
             .collect()
     }
 
+    /// Mutable connected peers for callers that hold &mut
+    pub fn connected_peers_mut(&mut self) -> Vec<&mut PeerInfo> {
+        self.peers.values_mut()
+            .filter(|p| p.is_connected())
+            .collect()
+    }
+
     /// Get all peers
     pub fn all_peers(&self) -> Vec<&PeerInfo> {
         self.peers.values().collect()
